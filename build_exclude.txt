@@ -4,3 +4,4 @@ build_exclude.txt
 data.raw
 Makefile
 sshots
+trash

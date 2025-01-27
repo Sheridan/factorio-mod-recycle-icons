@@ -1,33 +1,8 @@
 
 require("ri-global")
+require("lib.string_util")
 
 -- log(serpent.block(data.raw))
-
-local function first(t)
-  local i = 0
-  while t[i] == nil do i = i + 1 end
-  return t[i]
-end
-
-local function recipe_category(recipe)
-  -- if recipe.category then return recipe.category end
-  -- if recipe.subgroup then return recipe.subgroup end
-  return "no-category"
-end
-
-local function data_valid(recycle_recipe)
-  if not (recycle_recipe.icons ~= nil and recycle_recipe.ingredients ~= nil and #recycle_recipe.ingredients > 0)
-  then log("recycle recipe" .. recycle_recipe.name .. " without icons or ingredients"); return false end
-  -- log(first(recycle_recipe.ingredients).name .. " -> " .. data.raw.recipe[first(recycle_recipe.ingredients).name])
-
-  local recipe = data.raw.recipe[first(recycle_recipe.ingredients).name]
-  return recipe ~= nil and not recipe.hidden and recipe_category(recipe)
-end
-
-local function ingredient_subgroup_name(recycle_recipe)
-  local recipe = data.raw.recipe[first(recycle_recipe.ingredients).name]
-  return group_name .. "-" .. recipe_category(recipe)
-end
 
 function contains_subgroup(signals_data, subgroup_name)
   for _, element in ipairs(signals_data) do
@@ -42,46 +17,132 @@ function contains_subgroup(signals_data, subgroup_name)
   return false
 end
 
-local function make_subgroup(subgroup_name)
+local function make_subgroup(subgroup_name, order)
   return {
     type = "item-subgroup",
     name = subgroup_name,
     group = group_name,
-    order = subgroup_name,
+    order = order,
     hidden_in_factoriopedia = true
   }
 end
 
-local function make_icon(recipe, subgroup_name)
+local function make_virtual_signal_from_recipe(recipe, subgroup_name, order)
   return {
     type = "virtual-signal",
     name = "virtual-signal-" .. recipe.name,
     localised_name = recipe.localised_name,
+    localised_description = recipe.localised_description,
     subgroup = subgroup_name,
     icons = recipe.icons,
     icon_size = 64,
-    order = recipe.name,
+    order = order,
     hidden_in_factoriopedia = true
   }
 end
 
+local function make_virtual_signal_from_category(name, category, subgroup_name)
+  return {
+    type = "virtual-signal",
+    name = "virtual-signal-" .. name .. category.name .. "-recycling",
+    localised_name = {
+      "",
+      { "factoriopedia." .. name },
+      ": ",
+      { name .. "-name." .. category.name }
+    },
+    subgroup = subgroup_name,
+    icons = {
+      {
+        icon = "__quality__/graphics/icons/recycling.png"
+      },
+      {
+        icon = category.icon,
+        scale = 0.4
+      },
+      {
+        icon = "__quality__/graphics/icons/recycling-top.png"
+      }
+    },
+    icon_size = 64,
+    order = category.bonus_gui_order,
+    hidden_in_factoriopedia = true
+  }
+end
+
+local function is_recycling_recipe(name, recipe)
+  return  name:match("%-recycling$") or
+          (
+            recipe.category and
+            recipe.category == "recycling"
+          )
+end
+
+local function is_category_group(name, category)
+  return name:contains("category")
+end
+
+local function get_recycle_recipe_item(base_name)
+  for item_type, _ in pairs(defines.prototypes.item)
+  do
+		local type = data.raw[item_type]
+		if type
+    then
+		  local item = type[base_name]
+      if item then return item end
+		end
+  end
+  return nil
+end
+
+local function is_item_hidden(item)
+  local item_recipe = data.raw.recipe[item.name]
+  return (item_recipe ~= nil and item_recipe.hidden ~= nil and item_recipe.hidden) or
+         (item.hidden ~= nil and item.hidden) or
+         (item.enabled ~= nil and item.enabled) or
+         (item.parameter ~= nil and item.parameter) or
+         (item.subgroup ~= nil and (item.subgroup == "spawnables" or item.subgroup:match(".*infinity.*") ))
+end
+
 local function prepare_data()
   local recycling_signals_data = {}
-  for _, recipe in pairs(data.raw.recipe) do
-    if recipe.category and recipe.category == "recycling"
-    then
-      if data_valid(recipe)
+  -- ammo category
+  for name, _ in pairs(data.raw)
+  do
+    for _, category in pairs(data.raw[name])
+    do
+      if is_category_group(name, category) and category.icon ~= nil
       then
-        local subgroup_name = ingredient_subgroup_name(recipe)
+        local subgroup_name = category_subgroup_name .. name
+        if not contains_subgroup(recycling_signals_data, category_subgroup_name)
+        then
+          table.insert(recycling_signals_data, make_subgroup(subgroup_name, "zz" .. name))
+        end
+        table.insert(recycling_signals_data, make_virtual_signal_from_category(name, category, subgroup_name))
+      end
+    end
+  end
+  -- recipes
+  for name, recycle_recipe in pairs(data.raw.recipe)
+  do
+    if is_recycling_recipe(name, recycle_recipe)
+    then
+      local base_name = name:gsub("%-recycling", "")
+      local item = get_recycle_recipe_item(base_name)
+      -- log(serpent.block(item))
+      if  item and
+          not is_item_hidden(item) and
+          item.subgroup
+      then
+        local item_subgroup = data.raw['item-subgroup'][item.subgroup]
+        local item_group    = data.raw['item-group'][item_subgroup.group]
+
+        local subgroup_name = group_name .. item_subgroup.name
         if not contains_subgroup(recycling_signals_data, subgroup_name)
         then
-          table.insert(recycling_signals_data, make_subgroup(subgroup_name))
+          table.insert(recycling_signals_data, make_subgroup(subgroup_name, item_group.order .. item_subgroup.order))
         end
-        table.insert(recycling_signals_data, make_icon(recipe, subgroup_name))
-      else
-        -- log("Recipe " .. recipe.name .. " is`nt valid")
-        -- log(serpent.block(recipe))
-        -- log(serpent.block(data.raw.recipe[recipe.ingredients[1].name]))
+        table.insert(recycling_signals_data, make_virtual_signal_from_recipe(recycle_recipe, subgroup_name, item.order))
       end
     end
   end
