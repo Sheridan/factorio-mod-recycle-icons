@@ -54,14 +54,14 @@ local function make_virtual_signal_from_category(name, category, subgroup_name)
     subgroup = subgroup_name,
     icons = {
       {
-        icon = "__quality__/graphics/icons/recycling.png"
+        icon = "__recycler__/graphics/icons/recycling.png"
       },
       {
         icon = category.icon,
         scale = 0.4
       },
       {
-        icon = "__quality__/graphics/icons/recycling-top.png"
+        icon = "__recycler__/graphics/icons/recycling-top.png"
       }
     },
     icon_size = 64,

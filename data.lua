@@ -21,7 +21,7 @@ require("ri-global")
       name = "recycle",
       subgroup = "recycle-base",
       order = "a",
-      icon = "__quality__/graphics/icons/recycling.png",
+      icon = "__recycler__/graphics/icons/recycling.png",
       icon_size = 64,
       hidden_in_factoriopedia = true
     },
